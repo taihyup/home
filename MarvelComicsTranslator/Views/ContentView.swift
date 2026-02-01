@@ -2,293 +2,344 @@
 //  ContentView.swift
 //  MarvelComicsTranslator
 //
-//  메인 앱 화면 - 코믹 목록 표시
+//  메인 화면 - 화면 기록 시작/중지, 번역 상태 표시
 //
 
 import SwiftUI
+import ReplayKit
 
 struct ContentView: View {
-    @StateObject private var viewModel = ComicListViewModel()
+    @StateObject private var screenCaptureService = ScreenCaptureService.shared
+    @StateObject private var translationService = RealtimeTranslationService.shared
+    @StateObject private var pipService = PiPService.shared
+
     @State private var showSettings = false
+    @State private var showHistory = false
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // 검색바
-                SearchBar(text: $viewModel.searchText, onSearch: {
-                    Task {
-                        await viewModel.searchComics()
-                    }
-                })
-                .padding(.horizontal)
-                .padding(.top, 8)
+            ZStack {
+                // 배경 그라데이션
+                LinearGradient(
+                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
 
-                // 코믹 그리드
-                if viewModel.isLoading && viewModel.comics.isEmpty {
-                    LoadingView()
-                } else if let error = viewModel.errorMessage {
-                    ErrorView(message: error) {
-                        Task {
-                            await viewModel.loadComics()
-                        }
+                VStack(spacing: 24) {
+                    // 헤더
+                    headerSection
+
+                    // 상태 카드
+                    statusCard
+
+                    // 번역 결과 미리보기
+                    if !translationService.displayText.isEmpty {
+                        translationPreviewCard
                     }
-                } else if viewModel.comics.isEmpty {
-                    EmptyStateView()
-                } else {
-                    ComicGridView(viewModel: viewModel)
+
+                    Spacer()
+
+                    // 브로드캐스트 시작 버튼
+                    broadcastButton
+
+                    // 안내 텍스트
+                    instructionText
                 }
+                .padding()
             }
-            .navigationTitle("마블 코믹스")
+            .navigationTitle("")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showSettings = true }) {
-                        Image(systemName: "gear")
+                    HStack {
+                        Button(action: { showHistory = true }) {
+                            Image(systemName: "clock.arrow.circlepath")
+                        }
+
+                        Button(action: { showSettings = true }) {
+                            Image(systemName: "gearshape")
+                        }
                     }
                 }
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
-            .task {
-                if viewModel.comics.isEmpty {
-                    await viewModel.loadComics()
-                }
-            }
-            .refreshable {
-                await viewModel.refresh()
+            .sheet(isPresented: $showHistory) {
+                TranslationHistoryView()
             }
         }
     }
-}
 
-// MARK: - 검색바
+    // MARK: - Header Section
 
-struct SearchBar: View {
-    @Binding var text: String
-    var onSearch: () -> Void
+    private var headerSection: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "character.bubble.fill")
+                .font(.system(size: 60))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.blue, .purple],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
 
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.gray)
+            Text("마블 코믹스 번역기")
+                .font(.title)
+                .fontWeight(.bold)
 
-            TextField("코믹 검색...", text: $text)
-                .textFieldStyle(.plain)
-                .autocorrectionDisabled()
-                .onSubmit {
-                    onSearch()
-                }
+            Text("만화를 보면서 실시간 한글 번역")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding(.top, 20)
+    }
 
-            if !text.isEmpty {
-                Button(action: {
-                    text = ""
-                    onSearch()
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.gray)
-                }
+    // MARK: - Status Card
+
+    private var statusCard: some View {
+        VStack(spacing: 16) {
+            HStack {
+                statusIndicator(
+                    title: "화면 기록",
+                    isActive: screenCaptureService.isBroadcasting,
+                    activeIcon: "record.circle.fill",
+                    inactiveIcon: "record.circle"
+                )
+
+                Divider()
+                    .frame(height: 40)
+
+                statusIndicator(
+                    title: "번역 처리",
+                    isActive: translationService.isProcessing,
+                    activeIcon: "arrow.triangle.2.circlepath.circle.fill",
+                    inactiveIcon: "arrow.triangle.2.circlepath.circle"
+                )
+
+                Divider()
+                    .frame(height: 40)
+
+                statusIndicator(
+                    title: "PiP",
+                    isActive: pipService.isPiPActive,
+                    activeIcon: "pip.fill",
+                    inactiveIcon: "pip"
+                )
             }
         }
-        .padding(12)
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        )
     }
-}
 
-// MARK: - 코믹 그리드
+    private func statusIndicator(title: String, isActive: Bool, activeIcon: String, inactiveIcon: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: isActive ? activeIcon : inactiveIcon)
+                .font(.title2)
+                .foregroundColor(isActive ? .green : .gray)
 
-struct ComicGridView: View {
-    @ObservedObject var viewModel: ComicListViewModel
-
-    private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
-    ]
-
-    var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(viewModel.comics) { comic in
-                    NavigationLink(destination: ComicReaderView(comic: comic)) {
-                        ComicCardView(comic: comic)
-                    }
-                    .buttonStyle(.plain)
-                    .onAppear {
-                        Task {
-                            await viewModel.loadMoreComicsIfNeeded(currentComic: comic)
-                        }
-                    }
-                }
-            }
-            .padding()
-
-            if viewModel.isLoading && !viewModel.comics.isEmpty {
-                ProgressView()
-                    .padding()
-            }
-        }
-    }
-}
-
-// MARK: - 코믹 카드
-
-struct ComicCardView: View {
-    let comic: MarvelComic
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // 썸네일 이미지
-            AsyncImage(url: comic.thumbnailURL) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .aspectRatio(0.65, contentMode: .fit)
-                        .overlay {
-                            ProgressView()
-                        }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(0.65, contentMode: .fit)
-                case .failure:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .aspectRatio(0.65, contentMode: .fit)
-                        .overlay {
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                        }
-                @unknown default:
-                    EmptyView()
-                }
-            }
-            .cornerRadius(8)
-            .shadow(radius: 4)
-
-            // 제목
-            Text(comic.title)
+            Text(title)
                 .font(.caption)
-                .fontWeight(.medium)
-                .lineLimit(2)
-                .foregroundColor(.primary)
-        }
-    }
-}
-
-// MARK: - 로딩 뷰
-
-struct LoadingView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.5)
-            Text("코믹 로딩 중...")
                 .foregroundColor(.secondary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
     }
-}
 
-// MARK: - 에러 뷰
+    // MARK: - Translation Preview Card
 
-struct ErrorView: View {
-    let message: String
-    var retryAction: () -> Void
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 50))
-                .foregroundColor(.orange)
-
-            Text("오류 발생")
-                .font(.headline)
-
-            Text(message)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            Button("다시 시도") {
-                retryAction()
+    private var translationPreviewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "text.bubble.fill")
+                    .foregroundColor(.blue)
+                Text("최근 번역")
+                    .font(.headline)
+                Spacer()
             }
-            .buttonStyle(.borderedProminent)
+
+            Text(translationService.displayText)
+                .font(.body)
+                .foregroundColor(.primary)
+                .lineLimit(4)
+
+            if !translationService.originalText.isEmpty {
+                Divider()
+
+                Text(translationService.originalText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        )
+    }
+
+    // MARK: - Broadcast Button
+
+    private var broadcastButton: some View {
+        VStack(spacing: 12) {
+            if screenCaptureService.isBroadcasting {
+                // 중지 버튼
+                Button(action: stopBroadcast) {
+                    HStack {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.title2)
+                        Text("번역 중지")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red)
+                    .cornerRadius(16)
+                }
+            } else {
+                // 시작 버튼 - RPSystemBroadcastPickerView 사용
+                BroadcastPickerRepresentable()
+                    .frame(height: 56)
+                    .cornerRadius(16)
+            }
+        }
+    }
+
+    // MARK: - Instruction Text
+
+    private var instructionText: some View {
+        VStack(spacing: 8) {
+            if !screenCaptureService.isBroadcasting {
+                Text("사용 방법:")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    instructionRow(number: "1", text: "위 버튼을 눌러 화면 기록 시작")
+                    instructionRow(number: "2", text: "Marvel Comics 앱으로 이동")
+                    instructionRow(number: "3", text: "만화를 보면 자동으로 번역됩니다")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+            } else {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("화면을 분석하고 번역하는 중...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.bottom, 20)
+    }
+
+    private func instructionRow(number: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(number)
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Color.blue))
+
+            Text(text)
+        }
+    }
+
+    // MARK: - Actions
+
+    private func stopBroadcast() {
+        translationService.stopRealtimeTranslation()
+        pipService.stopPiP()
     }
 }
 
-// MARK: - 빈 상태 뷰
+// MARK: - Broadcast Picker (시스템 화면 기록 UI)
 
-struct EmptyStateView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "book.closed")
-                .font(.system(size: 50))
-                .foregroundColor(.gray)
+struct BroadcastPickerRepresentable: UIViewRepresentable {
+    func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
+        let picker = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 200, height: 56))
 
-            Text("코믹이 없습니다")
-                .font(.headline)
-                .foregroundColor(.secondary)
+        // 브로드캐스트 확장 번들 ID 설정
+        picker.preferredExtension = "com.marvelcomics.translator.BroadcastExtension"
 
-            Text("검색어를 변경해 보세요")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+        // 버튼 스타일 커스터마이즈
+        picker.showsMicrophoneButton = false
+
+        // 버튼 찾아서 스타일 변경
+        for subview in picker.subviews {
+            if let button = subview as? UIButton {
+                button.setTitle("  번역 시작", for: .normal)
+                button.setTitleColor(.white, for: .normal)
+                button.titleLabel?.font = UIFont.boldSystemFont(ofSize: 17)
+                button.backgroundColor = UIColor.systemBlue
+                button.layer.cornerRadius = 16
+                button.setImage(UIImage(systemName: "play.circle.fill"), for: .normal)
+                button.tintColor = .white
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        return picker
     }
+
+    func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) {}
 }
 
-// MARK: - 설정 뷰
+// MARK: - Settings View
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("autoTranslate") private var autoTranslate = true
     @AppStorage("showOriginalText") private var showOriginalText = false
+    @AppStorage("textToSpeech") private var textToSpeech = false
+    @AppStorage("processingInterval") private var processingInterval = 1.0
 
     var body: some View {
         NavigationStack {
-            List {
+            Form {
                 Section("번역 설정") {
-                    Toggle("자동 번역", isOn: $autoTranslate)
-
                     Toggle("원문 함께 표시", isOn: $showOriginalText)
-                }
 
-                Section("번역 언어팩") {
-                    NavigationLink(destination: LanguagePackView()) {
-                        HStack {
-                            Text("한국어 번역 언어팩")
-                            Spacer()
-                            if #available(iOS 17.4, *) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                            } else {
-                                Text("iOS 17.4 필요")
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
-                            }
-                        }
+                    Toggle("음성으로 읽어주기 (TTS)", isOn: $textToSpeech)
+
+                    VStack(alignment: .leading) {
+                        Text("처리 간격: \(String(format: "%.1f", processingInterval))초")
+                        Slider(value: $processingInterval, in: 0.5...3.0, step: 0.5)
                     }
                 }
 
-                Section("앱 정보") {
+                Section("언어 설정") {
+                    HStack {
+                        Text("원본 언어")
+                        Spacer()
+                        Text("영어 (English)")
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack {
+                        Text("번역 언어")
+                        Spacer()
+                        Text("한국어")
+                            .foregroundColor(.secondary)
+                    }
+
+                    NavigationLink(destination: LanguagePackView()) {
+                        Text("번역 언어팩 설정")
+                    }
+                }
+
+                Section("정보") {
                     HStack {
                         Text("버전")
                         Spacer()
                         Text("1.0.0")
                             .foregroundColor(.secondary)
-                    }
-
-                    Link(destination: URL(string: "https://developer.marvel.com")!) {
-                        HStack {
-                            Text("Marvel API 정보")
-                            Spacer()
-                            Image(systemName: "arrow.up.right.square")
-                                .foregroundColor(.secondary)
-                        }
                     }
                 }
 
@@ -311,7 +362,7 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - 언어팩 뷰
+// MARK: - Language Pack View
 
 struct LanguagePackView: View {
     var body: some View {
@@ -353,6 +404,60 @@ struct LanguagePackView: View {
         }
         .navigationTitle("번역 언어팩")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Translation History View
+
+struct TranslationHistoryView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var translationService = RealtimeTranslationService.shared
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if translationService.translationHistory.isEmpty {
+                    ContentUnavailableView(
+                        "번역 기록 없음",
+                        systemImage: "clock.arrow.circlepath",
+                        description: Text("화면 기록을 시작하면 번역 기록이 여기에 표시됩니다")
+                    )
+                } else {
+                    ForEach(translationService.translationHistory) { result in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(result.combinedTranslation)
+                                .font(.body)
+
+                            Text(result.combinedOriginal)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            Text(result.timestamp, style: .time)
+                                .font(.caption2)
+                                .foregroundColor(.tertiary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .navigationTitle("번역 기록")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !translationService.translationHistory.isEmpty {
+                        Button("모두 삭제", role: .destructive) {
+                            translationService.clearHistory()
+                        }
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("완료") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 

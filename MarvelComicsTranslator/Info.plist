@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>ko</string>
     <key>CFBundleDisplayName</key>
-    <string>마블 코믹스 번역</string>
+    <string>마블 번역</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -31,8 +31,6 @@
     <dict>
         <key>UIColorName</key>
         <string>AccentColor</string>
-        <key>UIImageName</key>
-        <string></string>
     </dict>
     <key>UIRequiredDeviceCapabilities</key>
     <array>
@@ -51,29 +49,16 @@
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <false/>
-        <key>NSExceptionDomains</key>
-        <dict>
-            <key>gateway.marvel.com</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <false/>
-                <key>NSExceptionRequiresForwardSecrecy</key>
-                <true/>
-            </dict>
-            <key>i.annihil.us</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <false/>
-                <key>NSExceptionRequiresForwardSecrecy</key>
-                <true/>
-            </dict>
-        </dict>
-    </dict>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>processing</string>
+    </array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>com.marvelcomics.translator.processing</string>
+    </array>
 </dict>
 </plist>
