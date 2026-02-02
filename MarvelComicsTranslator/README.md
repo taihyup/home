@@ -2,6 +2,25 @@
 
 Marvel Comics 앱에서 만화를 보면서 영어 텍스트를 실시간으로 한글 번역해주는 iOS 앱입니다.
 
+## 빠른 시작
+
+```bash
+# 1. GitHub에서 clone
+git clone https://github.com/taihyup/home.git
+cd home
+
+# 2. Xcode에서 프로젝트 열기
+open MarvelComicsTranslator.xcodeproj
+```
+
+### Xcode에서 해야 할 것
+
+1. **Team 설정**: 프로젝트 선택 → Signing & Capabilities → Team 선택
+2. **실제 기기 연결**: 시뮬레이터가 아닌 iPhone/iPad 연결
+3. **빌드 및 실행**: ⌘R
+
+> ⚠️ **중요**: 화면 기록 기능은 **실제 기기**에서만 작동합니다.
+
 ## 작동 방식
 
 ```
@@ -27,47 +46,45 @@ Marvel Comics 앱에서 만화를 보면서 영어 텍스트를 실시간으로 
 ## 시스템 요구사항
 
 - iOS 17.4 이상 (Apple Translation Framework 지원)
-- iPhone 또는 iPad
+- iPhone 또는 iPad (실제 기기 필수)
+- Xcode 15 이상
 
-## 설치 및 설정
+## 한국어 번역 언어팩 다운로드
 
-### 1. Xcode에서 빌드
+앱 사용 전 한국어 번역 언어팩을 다운로드해야 합니다:
 
-1. Xcode 15 이상 필요
-2. 프로젝트 열기
-3. App Group 설정: `group.com.marvelcomics.translator`
-4. 팀 서명 설정
-5. iPhone/iPad에서 실행
-
-### 2. 한국어 번역 언어팩 다운로드
-
-1. 설정 앱 열기
-2. 일반 > 언어 및 지역 > 번역 언어
-3. 한국어 다운로드
+1. **설정** 앱 열기
+2. **일반** > **언어 및 지역** > **번역 언어**
+3. **한국어** 다운로드
 
 ## 프로젝트 구조
 
 ```
-MarvelComicsTranslator/
-├── MarvelComicsTranslatorApp.swift   # 앱 엔트리 포인트
-├── Info.plist                         # 앱 설정
+MarvelComicsTranslator.xcodeproj    # Xcode 프로젝트
 │
-├── BroadcastExtension/                # 화면 기록 확장
-│   ├── SampleHandler.swift            # 화면 프레임 처리
-│   └── Info.plist
+├── MarvelComicsTranslator/         # 메인 앱
+│   ├── MarvelComicsTranslatorApp.swift
+│   ├── Info.plist
+│   ├── MarvelComicsTranslator.entitlements
+│   ├── Assets.xcassets/
+│   │
+│   ├── Views/
+│   │   └── ContentView.swift
+│   │
+│   ├── Models/
+│   │   └── TranslationModels.swift
+│   │
+│   └── Services/
+│       ├── ScreenCaptureService.swift
+│       ├── TextRecognitionService.swift
+│       ├── TranslationService.swift
+│       ├── RealtimeTranslationService.swift
+│       └── PiPService.swift
 │
-├── Models/
-│   └── TranslationModels.swift        # 번역 데이터 모델
-│
-├── Services/
-│   ├── ScreenCaptureService.swift     # 화면 캡처 관리
-│   ├── TextRecognitionService.swift   # Vision OCR
-│   ├── TranslationService.swift       # Apple Translation
-│   ├── RealtimeTranslationService.swift # 실시간 번역 파이프라인
-│   └── PiPService.swift               # Picture-in-Picture 관리
-│
-└── Views/
-    └── ContentView.swift              # 메인 UI
+└── BroadcastExtension/             # 화면 기록 확장
+    ├── SampleHandler.swift
+    ├── Info.plist
+    └── BroadcastExtension.entitlements
 ```
 
 ## 사용 방법
